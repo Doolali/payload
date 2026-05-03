@@ -1,0 +1,87 @@
+:root {
+    color-scheme: dark;
+    --bg: #1b2636;
+    --bg-elev: #243349;
+    --bg-hover: #2c3e58;
+    --bg-active: #344a6b;
+    --border: #34465e;
+    --text: #e6ecf5;
+    --text-dim: #93a3b8;
+    --accent: #ff7849;
+    --accent-hover: #ff8c5a;
+    --danger: #e0566b;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+    "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
+    "Helvetica Neue", sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+}
+
+#app {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+button {
+    font: inherit;
+    color: inherit;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 12px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: var(--bg-hover);
+}
+
+button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #1b2636;
+    font-weight: 600;
+}
+
+button.primary:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+
+button.ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-dim);
+}
+
+button.ghost:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+}
+
+input[type="text"] {
+    font: inherit;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px;
+    width: 100%;
+}
+
+input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent);
+}
