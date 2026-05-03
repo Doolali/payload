@@ -4,7 +4,9 @@
 // the collection tree for that project. Sessions live in their own tab.
 import {computed, ref} from 'vue';
 import {model} from '../../wailsjs/go/models';
+import {OpenProjectFile} from '../../wailsjs/go/main/App';
 import {useProject} from '../composables/useProject';
+import {confirmAction, promptText} from '../composables/useDialogs';
 import NewProjectDialog from './NewProjectDialog.vue';
 import CollectionTree from './CollectionTree.vue';
 
@@ -19,7 +21,19 @@ const emit = defineEmits<{
     (e: 'select', id: string): void;
     (e: 'create', payload: {name: string; dir: string}): void;
     (e: 'delete', id: string): void;
+    (e: 'opened', id: string): void;
 }>();
+
+async function openExisting() {
+    try {
+        const p = await OpenProjectFile();
+        if (p && p.id) emit('opened', p.id);
+    } catch (e: any) {
+        // Surfaced via the global error toast in App.vue if we lift; for now
+        // fall back to console so the user isn't blocked silently.
+        console.error('open project failed', e);
+    }
+}
 
 const showNew = ref(false);
 
@@ -27,10 +41,14 @@ const sorted = computed(() =>
     [...props.projects].sort((a, b) => a.name.localeCompare(b.name))
 );
 
-function confirmDelete(p: model.ProjectSummary) {
-    if (window.confirm(`Delete project "${p.name}"? This cannot be undone.`)) {
-        emit('delete', p.id);
-    }
+async function confirmDelete(p: model.ProjectSummary) {
+    const ok = await confirmAction({
+        title: 'Delete project',
+        message: `Delete "${p.name}"? This cannot be undone.`,
+        confirmText: 'Delete',
+        danger: true,
+    });
+    if (ok) emit('delete', p.id);
 }
 
 function openProjectVars() {
@@ -41,9 +59,14 @@ function isProjectVars(): boolean {
     return state.selection?.kind === 'project-vars';
 }
 
-function newCollection() {
+async function newCollection() {
     if (!state.project) return;
-    const name = window.prompt('Collection name', 'New collection');
+    const name = await promptText({
+        title: 'New collection',
+        placeholder: 'Collection name',
+        initial: '',
+        confirmText: 'Create',
+    });
     if (!name?.trim()) return;
     const now = new Date().toISOString() as any;
     const c: model.Collection = {
@@ -124,7 +147,8 @@ function deleteRequest(collectionId: string, requestId: string) {
 <template>
     <div class="projects-tab">
         <div class="actions-row">
-            <button class="primary full" @click="showNew = true">+ New project</button>
+            <button class="primary" @click="showNew = true">+ New project</button>
+            <button @click="openExisting">Open…</button>
         </div>
 
         <ul v-if="sorted.length" class="project-list">
@@ -191,10 +215,12 @@ function deleteRequest(collectionId: string, requestId: string) {
 .actions-row {
     padding: 8px 12px;
     border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 6px;
 }
 
-.full {
-    width: 100%;
+.actions-row .primary {
+    flex: 1;
 }
 
 .project-list {

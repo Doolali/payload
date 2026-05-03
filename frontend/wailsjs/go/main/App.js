@@ -34,6 +34,10 @@ export function LoadProject(arg1) {
   return window['go']['main']['App']['LoadProject'](arg1);
 }
 
+export function OpenProjectFile() {
+  return window['go']['main']['App']['OpenProjectFile']();
+}
+
 export function RenameProject(arg1, arg2) {
   return window['go']['main']['App']['RenameProject'](arg1, arg2);
 }

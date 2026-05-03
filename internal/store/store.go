@@ -349,6 +349,59 @@ func (s *Store) CreateProject(name, dir string) (*model.Project, error) {
 	return p, nil
 }
 
+// OpenProjectFile registers an existing project JSON file with the store
+// without creating a copy. The file is read to verify it parses as a
+// Project; on success it's added to the index (idempotent — re-opening the
+// same path returns the existing entry). The directory is also remembered
+// as the new default for future "New project" dialogs.
+func (s *Store) OpenProjectFile(path string) (*model.Project, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil, errors.New("path is required")
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("absolute path: %w", err)
+	}
+	raw, err := os.ReadFile(abs)
+	if err != nil {
+		return nil, fmt.Errorf("read project file: %w", err)
+	}
+	var p model.Project
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return nil, fmt.Errorf("parse project file: %w", err)
+	}
+	if p.ID == "" {
+		return nil, errors.New("file is missing a project id")
+	}
+	if p.Name == "" {
+		return nil, errors.New("file is missing a project name")
+	}
+
+	s.mu.Lock()
+	for i, e := range s.index.Projects {
+		if e.ID == p.ID {
+			// Update the recorded path in case the file moved since last seen.
+			s.index.Projects[i].Path = abs
+			s.index.LastUsedDir = filepath.Dir(abs)
+			err := s.saveIndexLocked()
+			s.mu.Unlock()
+			if err != nil {
+				return nil, fmt.Errorf("save index: %w", err)
+			}
+			return &p, nil
+		}
+	}
+	s.index.Projects = append(s.index.Projects, indexEntry{ID: p.ID, Path: abs})
+	s.index.LastUsedDir = filepath.Dir(abs)
+	err = s.saveIndexLocked()
+	s.mu.Unlock()
+	if err != nil {
+		return nil, fmt.Errorf("save index: %w", err)
+	}
+	return &p, nil
+}
+
 // RenameProject updates a project's name and persists it. The file path is
 // not changed — renaming on disk would invalidate any external references.
 func (s *Store) RenameProject(id, name string) (*model.Project, error) {

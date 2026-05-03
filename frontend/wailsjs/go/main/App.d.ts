@@ -18,6 +18,8 @@ export function ListSessions():Promise<Array<model.Session>>;
 
 export function LoadProject(arg1:string):Promise<model.Project>;
 
+export function OpenProjectFile():Promise<model.Project>;
+
 export function RenameProject(arg1:string,arg2:string):Promise<model.Project>;
 
 export function SaveProject(arg1:model.Project):Promise<model.Project>;

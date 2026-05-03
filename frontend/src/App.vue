@@ -12,6 +12,8 @@ import {
 import ProjectsTab from './components/ProjectsTab.vue';
 import SessionsTab from './components/SessionsTab.vue';
 import MainPane from './components/MainPane.vue';
+import PromptDialog from './components/PromptDialog.vue';
+import ConfirmDialog from './components/ConfirmDialog.vue';
 import {useProject} from './composables/useProject';
 import logo from './assets/images/logo.png';
 
@@ -46,6 +48,15 @@ async function createProject(payload: {name: string; dir: string}) {
         const p = await CreateProject(payload.name, payload.dir);
         await refresh();
         await loadProject(p.id);
+    } catch (e: any) {
+        error.value = String(e);
+    }
+}
+
+async function openedProject(id: string) {
+    try {
+        await refresh();
+        await loadProject(id);
     } catch (e: any) {
         error.value = String(e);
     }
@@ -97,6 +108,7 @@ onMounted(async () => {
                 @select="selectProject"
                 @create="createProject"
                 @delete="deleteProject"
+                @opened="openedProject"
             />
         </aside>
         <MainPane />
@@ -104,6 +116,8 @@ onMounted(async () => {
             {{ error }}
             <span class="dismiss">click to dismiss</span>
         </div>
+        <PromptDialog />
+        <ConfirmDialog />
     </div>
 </template>
 

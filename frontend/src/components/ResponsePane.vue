@@ -1,15 +1,17 @@
 <script setup lang="ts">
 // Display the result of the last Send. Switches between Body and Headers.
-// JSON bodies are pretty-printed; everything else is shown raw.
+// JSON bodies render in a collapsible, syntax-highlighted tree; other
+// content types fall back to a plain <pre>.
 import {computed, ref} from 'vue';
 import {model} from '../../wailsjs/go/models';
+import JsonView from './JsonView.vue';
 
 const props = defineProps<{
     response: model.Response | null;
     busy: boolean;
 }>();
 
-const tab = ref<'body' | 'headers'>('body');
+const tab = ref<'body' | 'headers' | 'raw'>('body');
 
 const statusClass = computed(() => {
     const s = props.response?.status ?? 0;
@@ -20,21 +22,39 @@ const statusClass = computed(() => {
     return 'status unknown';
 });
 
-const formattedBody = computed(() => {
-    if (!props.response) return '';
+// True when the response declares a JSON content type. Drives whether we
+// hand the body to JsonView or the plain raw renderer.
+const isJson = computed(() => {
+    if (!props.response) return false;
     const ct = (props.response.headers ?? [])
         .find(h => h.key.toLowerCase() === 'content-type')?.value
         ?? '';
+    return ct.includes('json');
+});
+
+const copyState = ref<'idle' | 'copied' | 'failed'>('idle');
+
+// Copy the response body to the clipboard. JSON gets pretty-printed first
+// so the pasted text matches what the tree viewer shows visually.
+async function copyBody() {
+    if (!props.response) return;
     const body = props.response.body ?? '';
-    if (ct.includes('json') && body.trim().length > 0) {
+    let text = body;
+    if (isJson.value) {
         try {
-            return JSON.stringify(JSON.parse(body), null, 2);
+            text = JSON.stringify(JSON.parse(body), null, 2);
         } catch {
-            return body;
+            text = body;
         }
     }
-    return body;
-});
+    try {
+        await navigator.clipboard.writeText(text);
+        copyState.value = 'copied';
+    } catch {
+        copyState.value = 'failed';
+    }
+    setTimeout(() => { copyState.value = 'idle'; }, 1500);
+}
 </script>
 
 <template>
@@ -45,13 +65,20 @@ const formattedBody = computed(() => {
             <span v-if="response.error" class="error-msg">{{ response.error }}</span>
             <div class="tabs">
                 <button :class="{active: tab === 'body'}" @click="tab = 'body'">Body</button>
+                <button v-if="isJson" :class="{active: tab === 'raw'}" @click="tab = 'raw'">Raw</button>
                 <button :class="{active: tab === 'headers'}" @click="tab = 'headers'">Headers ({{ response.headers?.length ?? 0 }})</button>
+                <button
+                    class="copy"
+                    :title="isJson ? 'Copy formatted JSON' : 'Copy body'"
+                    @click="copyBody"
+                >{{ copyState === 'copied' ? 'Copied!' : copyState === 'failed' ? 'Failed' : 'Copy' }}</button>
             </div>
         </header>
         <div v-if="busy" class="placeholder">Sending…</div>
         <div v-else-if="!response" class="placeholder">No response yet — click Send.</div>
         <div v-else class="content">
-            <pre v-if="tab === 'body'" class="body">{{ formattedBody }}</pre>
+            <JsonView v-if="tab === 'body' && isJson" :raw="response.body" />
+            <pre v-else-if="tab === 'body' || tab === 'raw'" class="body">{{ response.body }}</pre>
             <table v-else class="headers">
                 <thead><tr><th>Key</th><th>Value</th></tr></thead>
                 <tbody>
@@ -128,6 +155,15 @@ header {
 
 .tabs button:hover { color: var(--text); }
 .tabs button.active { color: var(--text); background: var(--bg); }
+
+.tabs button.copy {
+    margin-left: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    min-width: 60px;
+}
+
+.tabs button.copy:hover { background: var(--bg-hover); }
 
 .content {
     flex: 1;

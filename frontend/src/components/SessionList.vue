@@ -3,6 +3,7 @@
 // project itself; "Clear all" wipes the list, individual delete removes one.
 // New sessions default to GET / no URL and the user takes it from there.
 import {model} from '../../wailsjs/go/models';
+import {confirmAction} from '../composables/useDialogs';
 
 const props = defineProps<{
     sessions: model.Session[];
@@ -21,9 +22,15 @@ function preview(s: model.Session): string {
     return s.url || 'New request';
 }
 
-function confirmClear() {
+async function confirmClear() {
     if (!props.sessions.length) return;
-    if (window.confirm('Clear all sessions?')) emit('clear');
+    const ok = await confirmAction({
+        title: 'Clear all sessions',
+        message: 'Remove every session? This cannot be undone.',
+        confirmText: 'Clear all',
+        danger: true,
+    });
+    if (ok) emit('clear');
 }
 </script>
 

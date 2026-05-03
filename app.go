@@ -64,6 +64,26 @@ func (a *App) CreateProject(name, dir string) (*model.Project, error) {
 	return a.store.CreateProject(name, dir)
 }
 
+// OpenProjectFile pops a native file picker so the user can locate an
+// existing project JSON file, then registers it with the index. Returns
+// nil project (and nil error) if the user cancelled.
+func (a *App) OpenProjectFile() (*model.Project, error) {
+	path, err := wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{
+		Title:            "Open project file",
+		DefaultDirectory: a.store.DefaultProjectDir(),
+		Filters: []wruntime.FileFilter{
+			{DisplayName: "Project JSON (*.json)", Pattern: "*.json"},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if path == "" {
+		return nil, nil
+	}
+	return a.store.OpenProjectFile(path)
+}
+
 func (a *App) LoadProject(id string) (*model.Project, error) {
 	return a.store.LoadProject(id)
 }

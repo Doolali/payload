@@ -5,21 +5,24 @@
 import {ref} from 'vue';
 import {model} from '../../wailsjs/go/models';
 import type {Selection} from '../composables/useProject';
+import {confirmAction, promptText} from '../composables/useDialogs';
 
 const props = defineProps<{
     collections: model.Collection[];
     selection: Selection;
 }>();
 
-const emit = defineEmits<{
-    (e: 'newCollection'): void;
-    (e: 'newRequest', collectionId: string): void;
-    (e: 'selectRequest', collectionId: string, requestId: string): void;
-    (e: 'selectVars', collectionId: string): void;
-    (e: 'renameCollection', collectionId: string, name: string): void;
-    (e: 'deleteCollection', collectionId: string): void;
-    (e: 'deleteRequest', collectionId: string, requestId: string): void;
-}>();
+// Array-form emits — wider Vue 3.2 compatibility than the typed-call form,
+// which silently dropped some events in earlier 3.2.x releases.
+const emit = defineEmits([
+    'newCollection',
+    'newRequest',
+    'selectRequest',
+    'selectVars',
+    'renameCollection',
+    'deleteCollection',
+    'deleteRequest',
+]);
 
 const expanded = ref<Record<string, boolean>>({});
 
@@ -41,17 +44,26 @@ function isSelectedVars(collectionId: string): boolean {
     return s?.kind === 'collection-vars' && s.collectionId === collectionId;
 }
 
-function startRename(c: model.Collection, ev: MouseEvent) {
+async function startRename(c: model.Collection, ev: MouseEvent) {
     ev.stopPropagation();
-    const name = window.prompt('Rename collection', c.name);
+    const name = await promptText({
+        title: 'Rename collection',
+        placeholder: 'Collection name',
+        initial: c.name,
+        confirmText: 'Rename',
+    });
     if (name && name.trim()) emit('renameCollection', c.id, name.trim());
 }
 
-function confirmDeleteCollection(c: model.Collection, ev: MouseEvent) {
+async function confirmDeleteCollection(c: model.Collection, ev: MouseEvent) {
     ev.stopPropagation();
-    if (window.confirm(`Delete collection "${c.name}" and its ${c.requests?.length ?? 0} request(s)?`)) {
-        emit('deleteCollection', c.id);
-    }
+    const ok = await confirmAction({
+        title: 'Delete collection',
+        message: `Delete "${c.name}" and its ${c.requests?.length ?? 0} request(s)?`,
+        confirmText: 'Delete',
+        danger: true,
+    });
+    if (ok) emit('deleteCollection', c.id);
 }
 </script>
 
@@ -60,7 +72,7 @@ function confirmDeleteCollection(c: model.Collection, ev: MouseEvent) {
         <div class="section-header">
             <span>Collections</span>
             <div class="actions">
-                <button class="ghost" title="New collection" @click="emit('newCollection')">+</button>
+                <button class="primary tiny" title="New collection" @click="emit('newCollection')">+ New</button>
             </div>
         </div>
 
@@ -99,7 +111,10 @@ function confirmDeleteCollection(c: model.Collection, ev: MouseEvent) {
                 <div v-else-if="isExpanded(c.id)" class="empty-coll">No requests yet.</div>
             </li>
         </ul>
-        <div v-else class="empty">No collections yet.</div>
+        <div v-else class="empty">
+            <p>No collections yet.</p>
+            <button class="primary" @click="emit('newCollection')">+ New collection</button>
+        </div>
     </div>
 </template>
 
@@ -130,9 +145,20 @@ function confirmDeleteCollection(c: model.Collection, ev: MouseEvent) {
 }
 
 .actions button {
+    line-height: 1;
+}
+
+.actions .ghost {
     padding: 0 6px;
     font-size: 14px;
-    line-height: 1;
+}
+
+.tiny {
+    padding: 3px 8px;
+    font-size: 11px;
+    text-transform: none;
+    letter-spacing: 0;
+    border-radius: 3px;
 }
 
 .collections, .requests {
@@ -227,14 +253,19 @@ function confirmDeleteCollection(c: model.Collection, ev: MouseEvent) {
     color: var(--danger);
 }
 
-.empty, .empty-coll {
-    padding: 6px 12px;
+.empty {
+    padding: 16px 12px;
+    color: var(--text-dim);
+    font-size: 12px;
+    text-align: center;
+}
+
+.empty p { margin: 0 0 10px; }
+
+.empty-coll {
+    padding: 6px 12px 6px 28px;
     color: var(--text-dim);
     font-size: 12px;
     font-style: italic;
-}
-
-.empty-coll {
-    padding-left: 28px;
 }
 </style>

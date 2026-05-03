@@ -146,7 +146,7 @@ func Send(ctx context.Context, r model.Request, vars map[string]string) model.Re
 
 	bodyBytes, readErr := io.ReadAll(httpResp.Body)
 	out.Status = httpResp.StatusCode
-	out.StatusText = httpResp.Status
+	out.StatusText = statusReason(httpResp)
 	for k, vs := range httpResp.Header {
 		for _, v := range vs {
 			out.Headers = append(out.Headers, model.KV{Key: k, Value: v, Enabled: true})
@@ -158,6 +158,21 @@ func Send(ctx context.Context, r model.Request, vars map[string]string) model.Re
 	}
 	out.Body = string(bodyBytes)
 	return out
+}
+
+// statusReason returns the reason phrase only (e.g. "OK"), stripping the
+// numeric prefix Go puts on httpResp.Status (e.g. "200 OK"). Falls back to
+// http.StatusText for the code, then to httpResp.Status if both are empty.
+func statusReason(r *http.Response) string {
+	full := r.Status
+	prefix := fmt.Sprintf("%d ", r.StatusCode)
+	if strings.HasPrefix(full, prefix) {
+		return strings.TrimPrefix(full, prefix)
+	}
+	if reason := http.StatusText(r.StatusCode); reason != "" {
+		return reason
+	}
+	return full
 }
 
 // buildBody returns an io.Reader for the configured body and the default
