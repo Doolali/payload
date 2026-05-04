@@ -1,0 +1,172 @@
+name: Release
+
+# Trigger on a push to any release/MAJOR.MINOR branch (e.g. release/1.0,
+# release/2.3). The workflow:
+#   1. Parses the branch name to derive MAJOR.MINOR.
+#   2. Finds the highest existing tag matching MAJOR.MINOR.* and bumps the
+#      patch by one (or starts at .0 if none exists).
+#   3. Builds macOS / Windows / Linux binaries with Wails.
+#   4. Tags the commit and publishes a GitHub Release with the binaries.
+#
+# Example: push to release/1.0 → tags 1.0.0, then 1.0.1, 1.0.2 …
+# Switch to release/1.1 → tags 1.1.0, 1.1.1 …
+
+on:
+  push:
+    branches:
+      - 'release/*'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'release/MAJOR.MINOR branch to build (omit to use the branch dispatch was triggered on)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    name: Compute version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+      tag: ${{ steps.bump.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - id: bump
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          if [[ ! "$BRANCH" =~ ^release/([0-9]+)\.([0-9]+)$ ]]; then
+            echo "::error::Branch '$BRANCH' is not in the form release/MAJOR.MINOR"
+            exit 1
+          fi
+          MAJOR="${BASH_REMATCH[1]}"
+          MINOR="${BASH_REMATCH[2]}"
+
+          # Pick the highest existing patch for this major.minor.
+          LATEST=$(git tag --list "${MAJOR}.${MINOR}.*" --sort=-v:refname | head -n 1)
+          if [[ -z "$LATEST" ]]; then
+            PATCH=0
+          else
+            PATCH="${LATEST##*.}"
+            PATCH=$((PATCH + 1))
+          fi
+
+          VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$VERSION"     >> "$GITHUB_OUTPUT"
+          echo "Computed version: $VERSION"
+
+          # Fail fast if the tag somehow already exists (race with a parallel
+          # workflow run, or a manual tag landed between branches).
+          if git rev-parse "refs/tags/$VERSION" >/dev/null 2>&1; then
+            echo "::error::Tag $VERSION already exists"
+            exit 1
+          fi
+
+  build:
+    name: Build ${{ matrix.platform }}
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: darwin/universal
+            artifact: payload-${{ needs.version.outputs.version }}-darwin-universal.zip
+          - os: windows-latest
+            platform: windows/amd64
+            artifact: payload-${{ needs.version.outputs.version }}-windows-amd64.zip
+          - os: ubuntu-22.04
+            platform: linux/amd64
+            artifact: payload-${{ needs.version.outputs.version }}-linux-amd64.tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Linux build deps
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+
+      - name: Build
+        env:
+          CGO_ENABLED: '1'
+        run: wails build -platform ${{ matrix.platform }} -clean -trimpath -ldflags "-s -w -X main.version=${{ needs.version.outputs.version }}"
+
+      - name: Package macOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          cd build/bin
+          zip -r "../../${{ matrix.artifact }}" payload.app
+
+      - name: Package Windows
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build/bin/payload.exe -DestinationPath "${{ matrix.artifact }}"
+
+      - name: Package Linux
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          tar -czf "${{ matrix.artifact }}" -C build/bin payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+
+  release:
+    name: Tag and publish release
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Tag the commit
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: ${{ needs.version.outputs.version }}
+          generate_release_notes: true
+          files: artifacts/*
+          fail_on_unmatched_files: true
