@@ -270,6 +270,78 @@ func (s *Store) ListProjects() ([]model.ProjectSummary, error) {
 	return out, nil
 }
 
+// ProjectPath returns the absolute file path the named project is stored at,
+// or empty if the id isn't in the index.
+func (s *Store) ProjectPath(id string) string {
+	path, _ := s.lookupPath(id)
+	return path
+}
+
+// MoveProjectFile moves a project's file into newDir while keeping its
+// existing basename (or auto-deduping the basename if the target dir
+// already has a file by that name). Updates the index entry and the
+// LastUsedDir so the next "new project" dialog opens in the same place.
+func (s *Store) MoveProjectFile(id, newDir string) (*model.Project, error) {
+	if id == "" {
+		return nil, errors.New("project id is required")
+	}
+	newDir = strings.TrimSpace(newDir)
+	if newDir == "" {
+		return nil, errors.New("destination dir is required")
+	}
+	absDir, err := filepath.Abs(newDir)
+	if err != nil {
+		return nil, fmt.Errorf("absolute path: %w", err)
+	}
+	if err := os.MkdirAll(absDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create dir: %w", err)
+	}
+
+	// Make sure any pending save lands before we move the file out from
+	// under it.
+	if err := s.flushOne(id); err != nil {
+		return nil, fmt.Errorf("flush pending save: %w", err)
+	}
+
+	src, ok := s.lookupPath(id)
+	if !ok {
+		return nil, fmt.Errorf("project %s not in index", id)
+	}
+	if filepath.Dir(src) == absDir {
+		return s.LoadProject(id)
+	}
+
+	base := filepath.Base(src)
+	target := filepath.Join(absDir, base)
+	if _, err := os.Stat(target); err == nil {
+		// Collision — find a non-clashing name with a numeric suffix.
+		ext := filepath.Ext(base)
+		stem := strings.TrimSuffix(base, ext)
+		target = uniqueFilename(absDir, stem)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("stat target: %w", err)
+	}
+
+	if err := os.Rename(src, target); err != nil {
+		return nil, fmt.Errorf("move file: %w", err)
+	}
+
+	s.mu.Lock()
+	for i, e := range s.index.Projects {
+		if e.ID == id {
+			s.index.Projects[i].Path = target
+			break
+		}
+	}
+	s.index.LastUsedDir = absDir
+	saveErr := s.saveIndexLocked()
+	s.mu.Unlock()
+	if saveErr != nil {
+		return nil, fmt.Errorf("save index: %w", saveErr)
+	}
+	return s.LoadProject(id)
+}
+
 // LoadProject reads and parses a single project file by id. If a debounced
 // save is still pending for the project, the in-memory snapshot is returned
 // instead of the on-disk copy so the UI sees its own writes after switching

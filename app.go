@@ -64,6 +64,29 @@ func (a *App) CreateProject(name, dir string) (*model.Project, error) {
 	return a.store.CreateProject(name, dir)
 }
 
+// ProjectPath returns the absolute file path of a project, or empty if the
+// project isn't in the index.
+func (a *App) ProjectPath(id string) string {
+	return a.store.ProjectPath(id)
+}
+
+// MoveProject opens a directory picker and moves the project's JSON file
+// into the chosen directory. Returns nil project (no error) if the user
+// cancels the dialog.
+func (a *App) MoveProject(id string) (*model.Project, error) {
+	dir, err := wruntime.OpenDirectoryDialog(a.ctx, wruntime.OpenDialogOptions{
+		Title:            "Move project file to…",
+		DefaultDirectory: a.store.DefaultProjectDir(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if dir == "" {
+		return nil, nil
+	}
+	return a.store.MoveProjectFile(id, dir)
+}
+
 // OpenProjectFile pops a native file picker so the user can locate an
 // existing project JSON file, then registers it with the index. Returns
 // nil project (and nil error) if the user cancelled.

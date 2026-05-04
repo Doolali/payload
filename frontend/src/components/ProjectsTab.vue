@@ -8,6 +8,7 @@ import {OpenProjectFile} from '../../wailsjs/go/main/App';
 import {useProject} from '../composables/useProject';
 import {confirmAction, promptText} from '../composables/useDialogs';
 import NewProjectDialog from './NewProjectDialog.vue';
+import ProjectSettingsDialog from './ProjectSettingsDialog.vue';
 import CollectionTree from './CollectionTree.vue';
 
 const {state, scheduleProjectSave} = useProject();
@@ -36,6 +37,15 @@ async function openExisting() {
 }
 
 const showNew = ref(false);
+const showSettings = ref(false);
+
+function onSettingsUpdated(updated: model.Project) {
+    // Patch the in-memory project with the backend's authoritative copy so
+    // a renamed project shows the new name immediately without a reload.
+    if (state.project && state.project.id === updated.id) {
+        state.project.name = updated.name;
+    }
+}
 
 const sorted = computed(() =>
     [...props.projects].sort((a, b) => a.name.localeCompare(b.name))
@@ -211,6 +221,11 @@ function duplicateRequest(collectionId: string, requestId: string) {
                     title="Edit project variables"
                     @click="openProjectVars"
                 >Vars</button>
+                <button
+                    class="ghost cog"
+                    title="Project settings"
+                    @click="showSettings = true"
+                >⚙︎</button>
                 <span v-if="state.saving" class="saving">saving…</span>
             </header>
             <CollectionTree
@@ -231,6 +246,13 @@ function duplicateRequest(collectionId: string, requestId: string) {
             v-if="showNew"
             @cancel="showNew = false"
             @create="(payload) => { emit('create', payload); showNew = false; }"
+        />
+
+        <ProjectSettingsDialog
+            v-if="showSettings && state.project"
+            :project="state.project"
+            @close="showSettings = false"
+            @updated="onSettingsUpdated"
         />
     </div>
 </template>
@@ -359,6 +381,13 @@ function duplicateRequest(collectionId: string, requestId: string) {
 .vars-btn.active {
     background: var(--bg-active);
     color: var(--accent);
+}
+
+.cog {
+    padding: 3px 8px;
+    font-size: 14px;
+    line-height: 1;
+    border-radius: 3px;
 }
 
 .saving {

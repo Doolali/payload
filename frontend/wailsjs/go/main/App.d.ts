@@ -21,7 +21,11 @@ export function ListSessions():Promise<Array<model.Session>>;
 
 export function LoadProject(arg1:string):Promise<model.Project>;
 
+export function MoveProject(arg1:string):Promise<model.Project>;
+
 export function OpenProjectFile():Promise<model.Project>;
+
+export function ProjectPath(arg1:string):Promise<string>;
 
 export function RenameProject(arg1:string,arg2:string):Promise<model.Project>;
 
