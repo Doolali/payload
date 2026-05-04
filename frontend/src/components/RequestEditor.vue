@@ -3,12 +3,17 @@
 // request). Mutating any field schedules an autosave; Send hits the backend
 // HTTP client with merged variables and emits the response back to the
 // parent so it can decide whether to persist it.
-import {ref} from 'vue';
+import {computed, ref} from 'vue';
 import {SendRequest} from '../../wailsjs/go/main/App';
 import {model} from '../../wailsjs/go/models';
+import {useProject} from '../composables/useProject';
+import {promptText} from '../composables/useDialogs';
+import {defaultVarName, resolvePath, toVarString} from '../composables/jsonPath';
 import KVTable from './KVTable.vue';
 import BodyEditor from './BodyEditor.vue';
 import ResponsePane from './ResponsePane.vue';
+
+const {state, scheduleProjectSave} = useProject();
 
 const props = defineProps<{
     request: model.Request | model.Session;
@@ -23,6 +28,63 @@ const emit = defineEmits<{
     (e: 'response', resp: model.Response): void;
     (e: 'saveToCollection', collectionId: string): void;
 }>();
+
+const extractors = computed<model.Extractor[]>({
+    get: () => ((props.request as any).extractors ?? []) as model.Extractor[],
+    set: (v) => { (props.request as any).extractors = v; },
+});
+
+// Apply the request's saved extractors to the parsed response body. Each
+// extractor that resolves to a non-undefined value writes to project.vars.
+function applyExtractors(respBody: string): number {
+    if (!state.project) return 0;
+    if (!extractors.value.length) return 0;
+    let parsed: any;
+    try { parsed = JSON.parse(respBody); } catch { return 0; }
+    let written = 0;
+    for (const ex of extractors.value) {
+        const v = resolvePath(parsed, ex.path);
+        if (v === undefined) continue;
+        state.project.variables[ex.varName] = toVarString(v);
+        written++;
+    }
+    if (written) scheduleProjectSave();
+    return written;
+}
+
+// Capture a value picked from the JSON tree. Prompts for a name, registers
+// the extractor on the request, writes the current value to project vars
+// immediately so subsequent {{name}} references work straight away.
+async function captureExtractor(path: string, value: any) {
+    if (!state.project) {
+        state.lastError = 'Open a project to save variables.';
+        return;
+    }
+    const initial = defaultVarName(path);
+    const name = await promptText({
+        title: 'Save as project variable',
+        label: `Path: ${path || '$'}`,
+        placeholder: 'variable name',
+        initial,
+        confirmText: 'Save',
+    });
+    if (!name?.trim()) return;
+    const trimmed = name.trim();
+    state.project.variables[trimmed] = toVarString(value);
+    if (!(props.request as any).extractors) (props.request as any).extractors = [];
+    const list = extractors.value;
+    const existing = list.findIndex(e => e.varName === trimmed);
+    const ex = {path, varName: trimmed} as model.Extractor;
+    if (existing >= 0) list[existing] = ex;
+    else list.push(ex);
+    onChange();
+    scheduleProjectSave();
+}
+
+function removeExtractor(varName: string) {
+    extractors.value = extractors.value.filter(e => e.varName !== varName);
+    onChange();
+}
 
 function onSaveTargetChange(ev: Event) {
     const select = ev.target as HTMLSelectElement;
@@ -62,6 +124,7 @@ async function send() {
         } as any;
         const resp = await SendRequest(req, props.vars);
         emit('response', resp);
+        if (resp.body) applyExtractors(resp.body);
     } finally {
         sending.value = false;
     }
@@ -144,7 +207,16 @@ async function send() {
             />
         </div>
 
-        <ResponsePane :response="response" :busy="sending" />
+        <ResponsePane :response="response" :busy="sending" :on-save-path="captureExtractor" />
+
+        <div v-if="extractors.length" class="extractors">
+            <span class="ex-label">Saved on send:</span>
+            <span v-for="ex in extractors" :key="ex.varName" class="ex-chip">
+                <code>{{ ex.varName }}</code>
+                <span class="ex-path">← {{ ex.path || '$' }}</span>
+                <button class="ex-del" title="Remove" @click="removeExtractor(ex.varName)">×</button>
+            </span>
+        </div>
     </section>
 </template>
 
@@ -280,5 +352,59 @@ async function send() {
     overflow: auto;
     min-height: 160px;
     max-height: 40vh;
+}
+
+.extractors {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-elev);
+    font-size: 11px;
+}
+
+.ex-label {
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.ex-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2px 4px 2px 8px;
+}
+
+.ex-chip code {
+    color: var(--accent);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+.ex-path {
+    color: var(--text-dim);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 10px;
+}
+
+.ex-del {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 4px;
+    border-radius: 50%;
+}
+
+.ex-del:hover {
+    color: var(--danger);
+    background: var(--bg-hover);
 }
 </style>

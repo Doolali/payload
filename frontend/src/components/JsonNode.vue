@@ -4,8 +4,9 @@
 //   container    — `key: ▾ {` ... children ... `}` (collapsible)
 //   empty        — `key: {}` / `[]` on one line
 // The component imports itself for recursion (Vue 3 SFC compiler tolerates
-// the circular import).
-import {computed, ref} from 'vue';
+// the circular import). Each node also tracks its full JSON path from the
+// root so primitives can offer a "save as variable" affordance.
+import {computed, inject, ref} from 'vue';
 import JsonNode from './JsonNode.vue';
 
 const props = defineProps<{
@@ -13,7 +14,10 @@ const props = defineProps<{
     keyName?: string;
     isLast?: boolean;
     depth: number;
+    path?: string;
 }>();
+
+const onSavePath = inject<((path: string, value: any) => void) | null>('savePath', null);
 
 // Auto-expand the first few levels; deeper nodes start collapsed so big
 // payloads aren't a wall of text on first load.
@@ -53,13 +57,31 @@ const summary = computed(() => {
 function toggle() {
     if (isContainer.value && !isEmpty.value) expanded.value = !expanded.value;
 }
+
+// Build the path of a child node. Object keys append with a dot (or bare
+// when at root); array indices append in brackets.
+function childPath(seg: string | number): string {
+    const base = props.path ?? '';
+    if (typeof seg === 'number') return `${base}[${seg}]`;
+    return base ? `${base}.${seg}` : seg;
+}
+
+function saveSelf() {
+    if (!onSavePath) return;
+    onSavePath(props.path ?? '', props.value);
+}
 </script>
 
 <template>
     <div class="node">
         <!-- Primitive: one line. -->
         <div v-if="!isContainer" class="line">
-            <span v-if="keyName !== undefined" class="key">"{{ keyName }}":&nbsp;</span><span :class="`val v-${type}`">{{ formatted }}</span><span class="punct">{{ comma }}</span>
+            <span v-if="keyName !== undefined" class="key">"{{ keyName }}":&nbsp;</span><span :class="`val v-${type}`">{{ formatted }}</span><span class="punct">{{ comma }}</span><button
+                v-if="onSavePath && type !== 'null'"
+                class="save-as-var"
+                :title="`Save as project variable (${path || '$'})`"
+                @click="saveSelf"
+            >+ var</button>
         </div>
 
         <!-- Container collapsed (or empty). -->
@@ -80,6 +102,7 @@ function toggle() {
                     :key-name="e.k"
                     :is-last="i === entries.length - 1"
                     :depth="depth + 1"
+                    :path="childPath(type === 'array' ? i : (e.k as string))"
                 />
             </div>
             <div class="line">
@@ -131,5 +154,29 @@ function toggle() {
     padding-left: 18px;
     border-left: 1px dashed var(--border);
     margin-left: 6px;
+}
+
+.save-as-var {
+    margin-left: 8px;
+    padding: 0 6px;
+    font-size: 10px;
+    line-height: 16px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-dim);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 80ms ease;
+    font-family: inherit;
+}
+
+.line:hover .save-as-var {
+    opacity: 1;
+}
+
+.save-as-var:hover {
+    color: var(--accent);
+    border-color: var(--accent);
 }
 </style>

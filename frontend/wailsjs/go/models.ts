@@ -14,6 +14,20 @@ export namespace model {
 	        this.content = source["content"];
 	    }
 	}
+	export class Extractor {
+	    path: string;
+	    varName: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Extractor(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.varName = source["varName"];
+	    }
+	}
 	export class KV {
 	    key: string;
 	    value: string;
@@ -38,6 +52,7 @@ export namespace model {
 	    headers: KV[];
 	    queryParams: KV[];
 	    body: Body;
+	    extractors: Extractor[];
 	    // Go type: time
 	    createdAt: any;
 	    // Go type: time
@@ -56,6 +71,7 @@ export namespace model {
 	        this.headers = this.convertValues(source["headers"], KV);
 	        this.queryParams = this.convertValues(source["queryParams"], KV);
 	        this.body = this.convertValues(source["body"], Body);
+	        this.extractors = this.convertValues(source["extractors"], Extractor);
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	    }
@@ -120,6 +136,7 @@ export namespace model {
 		    return a;
 		}
 	}
+	
 	
 	export class Project {
 	    id: string;
@@ -250,6 +267,7 @@ export namespace model {
 	    headers: KV[];
 	    queryParams: KV[];
 	    body: Body;
+	    extractors: Extractor[];
 	    // Go type: time
 	    createdAt: any;
 	    // Go type: time
@@ -269,6 +287,7 @@ export namespace model {
 	        this.headers = this.convertValues(source["headers"], KV);
 	        this.queryParams = this.convertValues(source["queryParams"], KV);
 	        this.body = this.convertValues(source["body"], Body);
+	        this.extractors = this.convertValues(source["extractors"], Extractor);
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	        this.lastResponse = this.convertValues(source["lastResponse"], Response);

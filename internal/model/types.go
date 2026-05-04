@@ -41,16 +41,26 @@ type Body struct {
 	Content string   `json:"content"`
 }
 
+// Extractor declares a value to pull out of a JSON response and store as a
+// project variable each time the parent Request is sent. Path is a simple
+// dotted/indexed selector (e.g. "data.token", "items[0].id"); VarName is
+// the project-scope variable to write under.
+type Extractor struct {
+	Path    string `json:"path"`
+	VarName string `json:"varName"`
+}
+
 type Request struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Method      Method    `json:"method"`
-	URL         string    `json:"url"`
-	Headers     []KV      `json:"headers"`
-	QueryParams []KV      `json:"queryParams"`
-	Body        Body      `json:"body"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID          string      `json:"id"`
+	Name        string      `json:"name"`
+	Method      Method      `json:"method"`
+	URL         string      `json:"url"`
+	Headers     []KV        `json:"headers"`
+	QueryParams []KV        `json:"queryParams"`
+	Body        Body        `json:"body"`
+	Extractors  []Extractor `json:"extractors"`
+	CreatedAt   time.Time   `json:"createdAt"`
+	UpdatedAt   time.Time   `json:"updatedAt"`
 }
 
 type Collection struct {

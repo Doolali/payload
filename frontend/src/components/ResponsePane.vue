@@ -9,6 +9,7 @@ import JsonView from './JsonView.vue';
 const props = defineProps<{
     response: model.Response | null;
     busy: boolean;
+    onSavePath?: (path: string, value: any) => void;
 }>();
 
 const tab = ref<'body' | 'headers' | 'raw'>('body');
@@ -77,7 +78,7 @@ async function copyBody() {
         <div v-if="busy" class="placeholder">Sending…</div>
         <div v-else-if="!response" class="placeholder">No response yet — click Send.</div>
         <div v-else class="content">
-            <JsonView v-if="tab === 'body' && isJson" :raw="response.body" />
+            <JsonView v-if="tab === 'body' && isJson" :raw="response.body" :on-save-path="onSavePath" />
             <pre v-else-if="tab === 'body' || tab === 'raw'" class="body">{{ response.body }}</pre>
             <table v-else class="headers">
                 <thead><tr><th>Key</th><th>Value</th></tr></thead>
