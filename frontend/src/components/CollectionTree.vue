@@ -22,6 +22,7 @@ const emit = defineEmits([
     'renameCollection',
     'deleteCollection',
     'deleteRequest',
+    'duplicateRequest',
 ]);
 
 const expanded = ref<Record<string, boolean>>({});
@@ -65,6 +66,17 @@ async function confirmDeleteCollection(c: model.Collection, ev: MouseEvent) {
     });
     if (ok) emit('deleteCollection', c.id);
 }
+
+async function confirmDeleteRequest(c: model.Collection, r: model.Request, ev: MouseEvent) {
+    ev.stopPropagation();
+    const ok = await confirmAction({
+        title: 'Delete request',
+        message: `Delete "${r.name || r.url || 'Untitled'}"?`,
+        confirmText: 'Delete',
+        danger: true,
+    });
+    if (ok) emit('deleteRequest', c.id, r.id);
+}
 </script>
 
 <template>
@@ -72,7 +84,7 @@ async function confirmDeleteCollection(c: model.Collection, ev: MouseEvent) {
         <div class="section-header">
             <span>Collections</span>
             <div class="actions">
-                <button class="primary tiny" title="New collection" @click="emit('newCollection')">+ New</button>
+                <button class="tiny outline" title="New collection" @click="emit('newCollection')">+ New</button>
             </div>
         </div>
 
@@ -81,7 +93,6 @@ async function confirmDeleteCollection(c: model.Collection, ev: MouseEvent) {
                 <div class="row coll-row" @click="toggle(c.id)">
                     <span class="caret">{{ isExpanded(c.id) ? '▾' : '▸' }}</span>
                     <span class="name" :title="c.name">{{ c.name }}</span>
-                    <button class="ghost mini" title="New request" @click.stop="emit('newRequest', c.id)">+</button>
                     <button
                         class="ghost mini"
                         :class="{active: isSelectedVars(c.id)}"
@@ -90,6 +101,7 @@ async function confirmDeleteCollection(c: model.Collection, ev: MouseEvent) {
                     >{}</button>
                     <button class="ghost mini" title="Rename" @click.stop="startRename(c, $event)">✎</button>
                     <button class="ghost mini del" title="Delete" @click.stop="confirmDeleteCollection(c, $event)">×</button>
+                    <button class="primary tiny pinned" title="New request" @click.stop="emit('newRequest', c.id)">+ New</button>
                 </div>
                 <ul v-if="isExpanded(c.id) && c.requests?.length" class="requests">
                     <li
@@ -102,9 +114,14 @@ async function confirmDeleteCollection(c: model.Collection, ev: MouseEvent) {
                         <span :class="`badge method-${String(r.method).toLowerCase()}`">{{ r.method }}</span>
                         <span class="name">{{ r.name || r.url || 'Untitled' }}</span>
                         <button
+                            class="ghost mini"
+                            title="Duplicate request"
+                            @click.stop="emit('duplicateRequest', c.id, r.id)"
+                        >⎘</button>
+                        <button
                             class="ghost mini del"
                             title="Delete request"
-                            @click.stop="emit('deleteRequest', c.id, r.id)"
+                            @click.stop="confirmDeleteRequest(c, r, $event)"
                         >×</button>
                     </li>
                 </ul>
@@ -247,6 +264,31 @@ async function confirmDeleteCollection(c: model.Collection, ev: MouseEvent) {
 
 .mini.active {
     color: var(--accent);
+}
+
+/* Pinned actions (e.g. "+ New") stay visible regardless of hover so the
+   primary affordance of a collection is always discoverable. The outline
+   variant uses an accent border + transparent fill, distinguishing it from
+   the project-level solid-fill primary button. */
+.tiny.pinned {
+    opacity: 1;
+    padding: 2px 6px;
+    font-size: 10px;
+    text-transform: none;
+    letter-spacing: 0;
+    border-radius: 3px;
+    line-height: 1.4;
+}
+
+.outline {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.outline:hover {
+    background: rgba(255, 120, 73, 0.12);
 }
 
 .del:hover {

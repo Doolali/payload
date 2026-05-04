@@ -22,6 +22,10 @@ export function DeleteProject(arg1) {
   return window['go']['main']['App']['DeleteProject'](arg1);
 }
 
+export function GetUIState() {
+  return window['go']['main']['App']['GetUIState']();
+}
+
 export function ListProjects() {
   return window['go']['main']['App']['ListProjects']();
 }
@@ -48,6 +52,10 @@ export function SaveProject(arg1) {
 
 export function SaveSessions(arg1) {
   return window['go']['main']['App']['SaveSessions'](arg1);
+}
+
+export function SaveUIState(arg1) {
+  return window['go']['main']['App']['SaveUIState'](arg1);
 }
 
 export function SendRequest(arg1, arg2) {

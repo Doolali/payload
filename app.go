@@ -114,6 +114,18 @@ func (a *App) ListSessions() ([]model.Session, error) {
 	return a.store.LoadSessions()
 }
 
+// GetUIState returns the last-saved UI snapshot (which tab / project /
+// selection was active when the app last shut down).
+func (a *App) GetUIState() store.UIState {
+	return a.store.UIState()
+}
+
+// SaveUIState persists the current UI snapshot so the next launch can
+// restore it.
+func (a *App) SaveUIState(ui store.UIState) error {
+	return a.store.SaveUIState(ui)
+}
+
 // SaveSessions persists the global session list. Frontend-driven; the same
 // debounce-and-flush pattern as projects.
 func (a *App) SaveSessions(sessions []model.Session) error {

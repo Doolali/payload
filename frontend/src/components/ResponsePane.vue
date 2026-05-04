@@ -188,6 +188,7 @@ pre.body {
     color: var(--text);
     white-space: pre-wrap;
     word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 table.headers {

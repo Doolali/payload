@@ -42,8 +42,28 @@ type indexEntry struct {
 	Path string `json:"path"`
 }
 
+// UISelection mirrors the frontend's discriminated Selection union as a
+// flat shape that JSON-marshals cleanly. Empty Kind means "no selection".
+type UISelection struct {
+	Kind         string `json:"kind,omitempty"`
+	SessionID    string `json:"sessionId,omitempty"`
+	CollectionID string `json:"collectionId,omitempty"`
+	RequestID    string `json:"requestId,omitempty"`
+}
+
+// UIState is the small bit of "where was I" state we restore on launch:
+// which sidebar tab, which project (if any), and what was selected in the
+// main pane. Persisted alongside the project index so we don't need a
+// second file to manage.
+type UIState struct {
+	Tab       string      `json:"tab,omitempty"`
+	ProjectID string      `json:"projectId,omitempty"`
+	Selection UISelection `json:"selection,omitempty"`
+}
+
 type indexFile struct {
 	LastUsedDir string       `json:"lastUsedDir"`
+	UI          UIState      `json:"ui"`
 	Projects    []indexEntry `json:"projects"`
 }
 
@@ -177,6 +197,24 @@ func (s *Store) saveIndexLocked() error {
 // folder and the index).
 func (s *Store) AppDir() string {
 	return s.appDir
+}
+
+// UIState returns the saved "where was I" snapshot from the index. Empty
+// fields mean "no preference" — the frontend falls back to defaults.
+func (s *Store) UIState() UIState {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.index.UI
+}
+
+// SaveUIState persists the latest UI snapshot. Writes synchronously since
+// these calls are already debounced from the frontend and the file is tiny.
+func (s *Store) SaveUIState(ui UIState) error {
+	s.mu.Lock()
+	s.index.UI = ui
+	err := s.saveIndexLocked()
+	s.mu.Unlock()
+	return err
 }
 
 // DefaultProjectDir returns the directory to suggest when the user is asked

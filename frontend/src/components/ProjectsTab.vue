@@ -142,6 +142,36 @@ function deleteRequest(collectionId: string, requestId: string) {
     }
     scheduleProjectSave();
 }
+
+// Clone an existing request into the same collection. The new request gets
+// a fresh id, a "(copy)" suffix on the name, and starts unselected — the
+// caller can decide whether to select it after creation.
+function duplicateRequest(collectionId: string, requestId: string) {
+    if (!state.project) return;
+    const c = state.project.collections.find(c => c.id === collectionId);
+    if (!c) return;
+    const src = c.requests.find(r => r.id === requestId);
+    if (!src) return;
+    const now = new Date().toISOString() as any;
+    const cloneKV = (arr: model.KV[]) => arr.map(kv => ({key: kv.key, value: kv.value, enabled: kv.enabled}));
+    const dup: model.Request = {
+        id: crypto.randomUUID(),
+        name: `${src.name || 'Untitled'} (copy)`,
+        method: src.method,
+        url: src.url,
+        headers: cloneKV(src.headers),
+        queryParams: cloneKV(src.queryParams),
+        body: {type: src.body.type, content: src.body.content} as model.Body,
+        extractors: (src as any).extractors ? (src as any).extractors.map((e: model.Extractor) => ({...e})) : [],
+        createdAt: now,
+        updatedAt: now,
+    } as any;
+    const idx = c.requests.findIndex(r => r.id === requestId);
+    c.requests.splice(idx + 1, 0, dup);
+    state.selection = {kind: 'request', collectionId: c.id, requestId: dup.id};
+    state.transientResponse = null;
+    scheduleProjectSave();
+}
 </script>
 
 <template>
@@ -193,6 +223,7 @@ function deleteRequest(collectionId: string, requestId: string) {
                 @rename-collection="renameCollection"
                 @delete-collection="deleteCollection"
                 @delete-request="deleteRequest"
+                @duplicate-request="duplicateRequest"
             />
         </div>
 

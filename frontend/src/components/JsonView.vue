@@ -33,7 +33,8 @@ const parsed = computed<{ok: true; value: any} | {ok: false}>(() => {
 <style scoped>
 .json-view {
     padding: 12px 16px;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .raw {

@@ -120,7 +120,9 @@ function saveSelf() {
 }
 
 .line {
-    white-space: nowrap;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .key { color: #5ac8fa; }

@@ -1,15 +1,19 @@
 <script setup lang="ts">
-// Reusable key/value editor. Used for query params and headers.
-//
-// Always renders one extra blank row at the bottom — typing into it adds a
-// real entry. This is the same UX pattern Postman uses.
+// Reusable key/value editor used for query params and headers. Always
+// renders one extra blank row at the bottom — typing into it adds a real
+// entry, matching the Postman pattern. When key-suggestions or per-key
+// value suggestions are supplied, the Autocomplete component renders in
+// place of a plain input so the user gets a popup that actually closes.
 import {computed} from 'vue';
 import {model} from '../../wailsjs/go/models';
+import Autocomplete from './Autocomplete.vue';
 
 const props = defineProps<{
     rows: model.KV[];
     keyPlaceholder?: string;
     valuePlaceholder?: string;
+    keySuggestions?: string[];
+    valuesFor?: (key: string) => string[];
 }>();
 
 const emit = defineEmits<{
@@ -22,12 +26,24 @@ function blankRow(): model.KV {
     return {key: '', value: '', enabled: true};
 }
 
-function onInput(index: number, field: 'key' | 'value', value: string) {
+function ensureRow(index: number) {
     if (index === props.rows.length) {
-        if (!value) return;
         props.rows.push({key: '', value: '', enabled: true});
     }
-    props.rows[index][field] = value;
+}
+
+function setKey(index: number, value: string) {
+    if (!value && index === props.rows.length) return;
+    ensureRow(index);
+    props.rows[index].key = value;
+    pruneTrailingBlanks();
+    emit('change');
+}
+
+function setValue(index: number, value: string) {
+    if (!value && index === props.rows.length) return;
+    ensureRow(index);
+    props.rows[index].value = value;
     pruneTrailingBlanks();
     emit('change');
 }
@@ -50,6 +66,10 @@ function pruneTrailingBlanks() {
         if (!last.key && !last.value) props.rows.pop();
         else break;
     }
+}
+
+function valueOptions(key: string): string[] {
+    return props.valuesFor ? props.valuesFor(key) : [];
 }
 </script>
 
@@ -74,19 +94,39 @@ function pruneTrailingBlanks() {
                     />
                 </td>
                 <td>
+                    <Autocomplete
+                        v-if="keySuggestions && keySuggestions.length"
+                        :model-value="row.key"
+                        :options="keySuggestions"
+                        :placeholder="keyPlaceholder ?? 'key'"
+                        @update:model-value="(v: string) => setKey(i, v)"
+                    />
                     <input
+                        v-else
                         type="text"
                         :value="row.key"
                         :placeholder="keyPlaceholder ?? 'key'"
-                        @input="(e) => onInput(i, 'key', (e.target as HTMLInputElement).value)"
+                        autocomplete="off"
+                        spellcheck="false"
+                        @input="(e) => setKey(i, (e.target as HTMLInputElement).value)"
                     />
                 </td>
                 <td>
+                    <Autocomplete
+                        v-if="valueOptions(row.key).length"
+                        :model-value="row.value"
+                        :options="valueOptions(row.key)"
+                        :placeholder="valuePlaceholder ?? 'value'"
+                        @update:model-value="(v: string) => setValue(i, v)"
+                    />
                     <input
+                        v-else
                         type="text"
                         :value="row.value"
                         :placeholder="valuePlaceholder ?? 'value'"
-                        @input="(e) => onInput(i, 'value', (e.target as HTMLInputElement).value)"
+                        autocomplete="off"
+                        spellcheck="false"
+                        @input="(e) => setValue(i, (e.target as HTMLInputElement).value)"
                     />
                 </td>
                 <td class="actions">
@@ -123,6 +163,7 @@ function pruneTrailingBlanks() {
 .kv td {
     padding: 0;
     border-bottom: 1px solid var(--border);
+    position: relative;
 }
 
 .kv .enabled {
@@ -143,6 +184,8 @@ function pruneTrailingBlanks() {
     padding: 8px 10px;
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
     font-size: 12px;
+    width: 100%;
+    color: var(--text);
 }
 
 .kv input[type="text"]:focus {

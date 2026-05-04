@@ -2,19 +2,25 @@
 // Root layout. Tabbed left sidebar (Projects | Sessions) plus a main pane
 // that renders whichever editor matches the current selection. Sessions are
 // global and load once on mount; projects load on demand when picked.
+//
+// On launch we restore the last-used tab / project / selection from the
+// backend's UI snapshot, and re-save it (debounced) whenever any of those
+// change so a relaunch puts the user back where they were.
 import {onMounted, ref, watch} from 'vue';
 import type {model} from '../wailsjs/go/models';
 import {
     CreateProject,
     DeleteProject,
+    GetUIState,
     ListProjects,
+    SaveUIState,
 } from '../wailsjs/go/main/App';
 import ProjectsTab from './components/ProjectsTab.vue';
 import SessionsTab from './components/SessionsTab.vue';
 import MainPane from './components/MainPane.vue';
 import PromptDialog from './components/PromptDialog.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
-import {useProject} from './composables/useProject';
+import {useProject, type Selection} from './composables/useProject';
 import logo from './assets/images/logo.png';
 
 type Tab = 'projects' | 'sessions';
@@ -24,6 +30,8 @@ const {state, loadProject, loadSessions, clearProject, flushProjectSave} = usePr
 const projects = ref<model.ProjectSummary[]>([]);
 const error = ref<string | null>(null);
 const tab = ref<Tab>('sessions');
+const restored = ref(false);
+let uiSaveTimer: number | undefined;
 
 async function refresh() {
     try {
@@ -79,8 +87,79 @@ watch(() => state.lastError, (msg) => {
     }
 });
 
+// Reconstruct a Selection from the flat UISelection shape returned by Go.
+// Returns null for empty/unknown kinds.
+function selectionFromUI(s: any): Selection {
+    if (!s || !s.kind) return null;
+    switch (s.kind) {
+        case 'session': return {kind: 'session', sessionId: s.sessionId};
+        case 'request': return {kind: 'request', collectionId: s.collectionId, requestId: s.requestId};
+        case 'project-vars': return {kind: 'project-vars'};
+        case 'collection-vars': return {kind: 'collection-vars', collectionId: s.collectionId};
+        default: return null;
+    }
+}
+
+// Inverse of selectionFromUI — flatten a Selection for the backend snapshot.
+function uiFromSelection(sel: Selection): any {
+    if (!sel) return {};
+    switch (sel.kind) {
+        case 'session': return {kind: 'session', sessionId: sel.sessionId};
+        case 'request': return {kind: 'request', collectionId: sel.collectionId, requestId: sel.requestId};
+        case 'project-vars': return {kind: 'project-vars'};
+        case 'collection-vars': return {kind: 'collection-vars', collectionId: sel.collectionId};
+    }
+}
+
+// Drop a restored selection that no longer points at a real entity (the
+// session was deleted, the collection was renamed, etc).
+function selectionStillValid(sel: Selection): boolean {
+    if (!sel) return false;
+    if (sel.kind === 'session') return state.sessions.some(s => s.id === sel.sessionId);
+    if (!state.project) return false;
+    if (sel.kind === 'project-vars') return true;
+    const c = state.project.collections.find(c => c.id === sel.collectionId);
+    if (!c) return false;
+    if (sel.kind === 'collection-vars') return true;
+    return c.requests.some(r => r.id === sel.requestId);
+}
+
+async function restoreUI() {
+    let ui: any = null;
+    try { ui = await GetUIState(); } catch { /* fresh install */ }
+    if (ui?.projectId) {
+        try { await loadProject(ui.projectId); }
+        catch { /* project file gone — fall through */ }
+    }
+    if (ui?.tab === 'projects' || ui?.tab === 'sessions') {
+        tab.value = ui.tab;
+    }
+    const sel = selectionFromUI(ui?.selection);
+    if (sel && selectionStillValid(sel)) {
+        state.selection = sel;
+    }
+    restored.value = true;
+}
+
+function scheduleUISave() {
+    if (!restored.value) return;
+    if (uiSaveTimer) clearTimeout(uiSaveTimer);
+    uiSaveTimer = window.setTimeout(async () => {
+        try {
+            await SaveUIState({
+                tab: tab.value,
+                projectId: state.project?.id ?? '',
+                selection: uiFromSelection(state.selection),
+            } as any);
+        } catch { /* non-fatal */ }
+    }, 250);
+}
+
+watch([tab, () => state.project?.id ?? null, () => state.selection], scheduleUISave, {deep: true});
+
 onMounted(async () => {
     await Promise.all([refresh(), loadSessions()]);
+    await restoreUI();
 });
 </script>
 

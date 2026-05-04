@@ -9,6 +9,7 @@ import {model} from '../../wailsjs/go/models';
 import {useProject} from '../composables/useProject';
 import {promptText} from '../composables/useDialogs';
 import {defaultVarName, resolvePath, toVarString} from '../composables/jsonPath';
+import {HEADER_NAMES, valuesForHeader} from '../composables/headerSuggestions';
 import KVTable from './KVTable.vue';
 import BodyEditor from './BodyEditor.vue';
 import ResponsePane from './ResponsePane.vue';
@@ -198,6 +199,8 @@ async function send() {
                 v-else-if="tab === 'headers'"
                 :rows="props.request.headers"
                 key-placeholder="header"
+                :key-suggestions="HEADER_NAMES"
+                :values-for="valuesForHeader"
                 @change="onChange"
             />
             <BodyEditor

@@ -314,3 +314,60 @@ export namespace model {
 
 }
 
+export namespace store {
+	
+	export class UISelection {
+	    kind?: string;
+	    sessionId?: string;
+	    collectionId?: string;
+	    requestId?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UISelection(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.sessionId = source["sessionId"];
+	        this.collectionId = source["collectionId"];
+	        this.requestId = source["requestId"];
+	    }
+	}
+	export class UIState {
+	    tab?: string;
+	    projectId?: string;
+	    selection?: UISelection;
+	
+	    static createFrom(source: any = {}) {
+	        return new UIState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.tab = source["tab"];
+	        this.projectId = source["projectId"];
+	        this.selection = this.convertValues(source["selection"], UISelection);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
