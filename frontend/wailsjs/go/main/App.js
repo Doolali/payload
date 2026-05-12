@@ -6,6 +6,14 @@ export function AppDir() {
   return window['go']['main']['App']['AppDir']();
 }
 
+export function AppVersion() {
+  return window['go']['main']['App']['AppVersion']();
+}
+
+export function CheckForUpdate() {
+  return window['go']['main']['App']['CheckForUpdate']();
+}
+
 export function ChooseProjectDir() {
   return window['go']['main']['App']['ChooseProjectDir']();
 }
@@ -20,6 +28,10 @@ export function DefaultProjectDir() {
 
 export function DeleteProject(arg1) {
   return window['go']['main']['App']['DeleteProject'](arg1);
+}
+
+export function DownloadAndInstallUpdate(arg1, arg2) {
+  return window['go']['main']['App']['DownloadAndInstallUpdate'](arg1, arg2);
 }
 
 export function GetUIState() {

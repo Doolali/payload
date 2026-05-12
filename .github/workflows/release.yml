@@ -126,6 +126,33 @@ jobs:
         run: |
           Compress-Archive -Path build/bin/payload.exe -DestinationPath "${{ matrix.artifact }}"
 
+      - name: Install WiX Toolset
+        if: matrix.os == 'windows-latest'
+        run: dotnet tool install --global wix --version 5.0.2
+
+      - name: Build Windows MSI
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        env:
+          PRODUCT_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          $msi = "payload-$env:PRODUCT_VERSION-windows-amd64.msi"
+          wix build build/windows/installer/payload.wxs `
+            -arch x64 `
+            -d "ProductVersion=$env:PRODUCT_VERSION" `
+            -d "SourceDir=$pwd\build\bin" `
+            -d "IconFile=$pwd\build\windows\icon.ico" `
+            -o "$msi"
+          "MSI_ARTIFACT=$msi" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Upload Windows MSI artifact
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.MSI_ARTIFACT }}
+          path: ${{ env.MSI_ARTIFACT }}
+          if-no-files-found: error
+
       - name: Package Linux
         if: matrix.os == 'ubuntu-22.04'
         run: |

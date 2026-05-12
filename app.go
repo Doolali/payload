@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"runtime"
 	"time"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -9,21 +10,46 @@ import (
 	"payload/internal/httpclient"
 	"payload/internal/model"
 	"payload/internal/store"
+	"payload/internal/updater"
+)
+
+// Repo coordinates for the GitHub releases the updater checks against.
+const (
+	updateOwner = "Doolali"
+	updateRepo  = "payload"
 )
 
 // App is bound into the Vue runtime. Each exported method becomes callable
 // from TypeScript via the generated wailsjs bindings.
 type App struct {
-	ctx   context.Context
-	store *store.Store
+	ctx     context.Context
+	store   *store.Store
+	version string
 }
 
-func NewApp(s *store.Store) *App {
-	return &App{store: s}
+func NewApp(s *store.Store, version string) *App {
+	return &App{store: s, version: version}
 }
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	go a.silentUpdateCheck()
+}
+
+// silentUpdateCheck runs once shortly after launch. If a newer release exists
+// it emits "update:available" so the frontend can offer to install. Failures
+// (offline, rate limit, etc.) are intentionally swallowed — a missed check is
+// never worth surfacing as an error.
+func (a *App) silentUpdateCheck() {
+	select {
+	case <-a.ctx.Done():
+		return
+	case <-time.After(5 * time.Second):
+	}
+	info := a.CheckForUpdate()
+	if info.Available {
+		wruntime.EventsEmit(a.ctx, "update:available", info)
+	}
 }
 
 // shutdown flushes any pending debounced saves so a clean window close never
@@ -162,4 +188,70 @@ func (a *App) SendRequest(r model.Request, vars map[string]string) model.Respons
 	ctx, cancel := context.WithTimeout(a.ctx, 65*time.Second)
 	defer cancel()
 	return httpclient.Send(ctx, r, vars)
+}
+
+// AppVersion returns the version baked into this build. Dev builds report
+// "dev" so the updater can short-circuit comparisons.
+func (a *App) AppVersion() string {
+	return a.version
+}
+
+// CheckForUpdate queries GitHub for the latest release and returns a flat
+// status struct the UI can render directly. Network errors are reported via
+// Info.Notes so the frontend can show a single uniform "couldn't check"
+// message instead of plumbing errors through Wails' promise rejection.
+func (a *App) CheckForUpdate() updater.Info {
+	info := updater.Info{CurrentVersion: a.version}
+
+	ctx, cancel := context.WithTimeout(a.ctx, 20*time.Second)
+	defer cancel()
+
+	rel, err := updater.LatestRelease(ctx, updateOwner, updateRepo)
+	if err != nil {
+		info.Notes = "Couldn't reach GitHub to check for updates."
+		return info
+	}
+
+	info.LatestVersion = rel.TagName
+	info.ReleaseURL = rel.HTMLURL
+	info.Notes = rel.Body
+
+	if !updater.IsNewer(rel.TagName, a.version) {
+		return info
+	}
+	info.Available = true
+
+	if asset := updater.AssetForPlatform(rel, runtime.GOOS, runtime.GOARCH); asset != nil {
+		info.AssetURL = asset.BrowserDownloadURL
+		info.AssetName = asset.Name
+		info.CanAutoInstall = updater.CanAutoInstall(asset.Name)
+	}
+	return info
+}
+
+// DownloadAndInstallUpdate downloads the asset at downloadURL into a temp
+// directory, launches the platform installer, and quits the app a moment
+// later so the installer can replace the running binary cleanly.
+func (a *App) DownloadAndInstallUpdate(downloadURL, fileName string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	asset := &updater.Asset{
+		Name:               fileName,
+		BrowserDownloadURL: downloadURL,
+	}
+	path, err := updater.Download(ctx, asset)
+	if err != nil {
+		return err
+	}
+	if err := updater.LaunchInstaller(path); err != nil {
+		return err
+	}
+	// Give Windows a beat to surface the UAC dialog before our process exits.
+	// Once we're gone, msiexec can replace the binary without "files in use".
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		wruntime.Quit(a.ctx)
+	}()
+	return nil
 }

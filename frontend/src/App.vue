@@ -9,21 +9,38 @@
 import {onMounted, ref, watch} from 'vue';
 import type {model} from '../wailsjs/go/models';
 import {
+    CheckForUpdate,
     CreateProject,
     DeleteProject,
+    DownloadAndInstallUpdate,
     GetUIState,
     ListProjects,
     SaveUIState,
 } from '../wailsjs/go/main/App';
+import {BrowserOpenURL, EventsOn} from '../wailsjs/runtime/runtime';
 import ProjectsTab from './components/ProjectsTab.vue';
 import SessionsTab from './components/SessionsTab.vue';
 import MainPane from './components/MainPane.vue';
 import PromptDialog from './components/PromptDialog.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
+import {confirmAction} from './composables/useDialogs';
 import {useProject, type Selection} from './composables/useProject';
 import logo from './assets/images/logo.png';
 
 type Tab = 'projects' | 'sessions';
+
+// Mirrors updater.Info from the Go side. Inlined so this module compiles
+// before Wails regenerates models.ts.
+interface UpdateInfo {
+    available: boolean;
+    currentVersion: string;
+    latestVersion: string;
+    releaseUrl: string;
+    assetUrl: string;
+    assetName: string;
+    notes: string;
+    canAutoInstall: boolean;
+}
 
 const {state, loadProject, loadSessions, clearProject, flushProjectSave} = useProject();
 
@@ -31,6 +48,7 @@ const projects = ref<model.ProjectSummary[]>([]);
 const error = ref<string | null>(null);
 const tab = ref<Tab>('sessions');
 const restored = ref(false);
+const updateInfo = ref<UpdateInfo | null>(null);
 let uiSaveTimer: number | undefined;
 
 async function refresh() {
@@ -157,13 +175,81 @@ function scheduleUISave() {
 
 watch([tab, () => state.project?.id ?? null, () => state.selection], scheduleUISave, {deep: true});
 
+// Show the user the offer to install. Confirms once, then either kicks off
+// the in-app installer (Windows MSI) or opens the GitHub release page.
+async function offerUpdate(info: UpdateInfo) {
+    const installLabel = info.canAutoInstall ? 'Install Now' : 'Open Release Page';
+    const detail = info.canAutoInstall
+        ? 'The app will close while the installer runs.'
+        : 'Auto-install isn\'t available on this platform.';
+    const ok = await confirmAction({
+        title: 'Update Available',
+        message: `Version ${info.latestVersion} is available (you have ${info.currentVersion}). ${detail}`,
+        confirmText: installLabel,
+    });
+    if (!ok) return;
+    try {
+        if (info.canAutoInstall) {
+            await DownloadAndInstallUpdate(info.assetUrl, info.assetName);
+        } else {
+            BrowserOpenURL(info.releaseUrl);
+        }
+        updateInfo.value = null;
+    } catch (e: any) {
+        error.value = `Update failed: ${e}`;
+    }
+}
+
+// Triggered by the Help → Check for Updates menu. Always gives the user
+// feedback (up-to-date / offline / update available) so the click feels
+// responsive, unlike the silent startup check.
+async function manualCheckForUpdates() {
+    let info: UpdateInfo;
+    try {
+        info = await CheckForUpdate() as UpdateInfo;
+    } catch (e: any) {
+        error.value = `Update check failed: ${e}`;
+        return;
+    }
+    if (info.available) {
+        updateInfo.value = info;
+        await offerUpdate(info);
+        return;
+    }
+    const offline = info.notes && info.notes.startsWith("Couldn't reach");
+    await confirmAction({
+        title: 'Check for Updates',
+        message: offline
+            ? info.notes
+            : `You're running the latest version (${info.currentVersion || 'dev'}).`,
+        confirmText: 'OK',
+    });
+}
+
 onMounted(async () => {
+    EventsOn('update:available', (info: UpdateInfo) => {
+        updateInfo.value = info;
+    });
+    EventsOn('menu:check-for-updates', () => {
+        void manualCheckForUpdates();
+    });
     await Promise.all([refresh(), loadSessions()]);
     await restoreUI();
 });
 </script>
 
 <template>
+    <div
+        v-if="updateInfo"
+        class="update-banner"
+    >
+        <span class="update-text">
+            Update {{ updateInfo.latestVersion }} available
+            <span class="update-current">(you have {{ updateInfo.currentVersion }})</span>
+        </span>
+        <button class="primary" @click="offerUpdate(updateInfo!)">Install</button>
+        <button class="ghost" @click="updateInfo = null">Dismiss</button>
+    </div>
     <div class="layout">
         <aside class="sidebar">
             <header class="brand">
@@ -255,6 +341,26 @@ onMounted(async () => {
 .tabs button.active {
     color: var(--text);
     border-bottom-color: var(--accent);
+}
+
+.update-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: var(--bg-elev);
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.update-text {
+    flex: 1;
+}
+
+.update-current {
+    color: var(--text-dim);
+    margin-left: 4px;
 }
 
 .error {

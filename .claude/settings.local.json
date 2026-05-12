@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wails dev *)",
+      "PowerShell(Get-Command wails -ErrorAction SilentlyContinue)",
+      "PowerShell(go env GOPATH; if \\(Test-Path \"$env:USERPROFILE\\\\go\\\\bin\\\\wails.exe\"\\) { \"Found: $env:USERPROFILE\\\\go\\\\bin\\\\wails.exe\" })",
+      "PowerShell(go build ./...)",
+      "PowerShell(if \\(-not \\(Test-Path \"frontend\\\\node_modules\"\\)\\) { Set-Location frontend; npm install; Set-Location .. } else { Write-Output \"node_modules exists\" })"
+    ]
+  }
+}

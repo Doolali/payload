@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WiX v5 source for the Payload Windows MSI installer.
+  Built from CI after `wails build` produces payload.exe.
+
+  Required parameters (passed via `wix build -d`):
+    ProductVersion : release version, e.g. 1.0.0
+    SourceDir      : absolute path to the directory containing payload.exe
+    IconFile       : absolute path to the .ico file used for ARP and shortcuts
+
+  Install location: C:\Program Files\payload\
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+      Name="Payload"
+      Manufacturer="Protostream"
+      Version="$(var.ProductVersion)"
+      UpgradeCode="b7c3a2e9-4d8f-4a6e-b5c1-9f2d8e7a3b4c"
+      Scope="perMachine">
+
+    <SummaryInformation Description="Payload Installer" />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+
+    <Icon Id="payload.ico" SourceFile="$(var.IconFile)" />
+    <Property Id="ARPPRODUCTICON" Value="payload.ico" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="payload">
+        <Component Id="PayloadExe" Bitness="always64">
+          <File Id="payload.exe"
+                Source="$(var.SourceDir)\payload.exe"
+                KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut" Guid="*" Bitness="always64">
+        <Shortcut Id="PayloadStartMenuShortcut"
+                  Name="Payload"
+                  Description="Payload"
+                  Target="[#payload.exe]"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="payload.ico" />
+        <RegistryValue Root="HKLM"
+                       Key="Software\Protostream\Payload"
+                       Name="installed"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder">
+      <Component Id="DesktopShortcut" Guid="*" Bitness="always64">
+        <Shortcut Id="PayloadDesktopShortcut"
+                  Name="Payload"
+                  Description="Payload"
+                  Target="[#payload.exe]"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="payload.ico" />
+        <RegistryValue Root="HKLM"
+                       Key="Software\Protostream\Payload"
+                       Name="desktop_shortcut"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="Payload" Level="1">
+      <ComponentRef Id="PayloadExe" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="DesktopShortcut" />
+    </Feature>
+  </Package>
+</Wix>

@@ -314,8 +314,39 @@ export namespace model {
 
 }
 
+export namespace updater {
+
+	export class Info {
+	    available: boolean;
+	    currentVersion: string;
+	    latestVersion: string;
+	    releaseUrl: string;
+	    assetUrl: string;
+	    assetName: string;
+	    notes: string;
+	    canAutoInstall: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new Info(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.available = source["available"];
+	        this.currentVersion = source["currentVersion"];
+	        this.latestVersion = source["latestVersion"];
+	        this.releaseUrl = source["releaseUrl"];
+	        this.assetUrl = source["assetUrl"];
+	        this.assetName = source["assetName"];
+	        this.notes = source["notes"];
+	        this.canAutoInstall = source["canAutoInstall"];
+	    }
+	}
+
+}
+
 export namespace store {
-	
+
 	export class UISelection {
 	    kind?: string;
 	    sessionId?: string;
